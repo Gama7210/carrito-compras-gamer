@@ -19,10 +19,13 @@ app.use(session({
     secret: process.env.SESSION_SECRET || 'carrito-gamer-secret',
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 } // 24 horas
+    cookie: { 
+        secure: process.env.NODE_ENV === 'production', // Secure en producción
+        maxAge: 24 * 60 * 60 * 1000 
+    }
 }));
 
-// En server.js, asegúrate de tener este middleware:
+// Middleware para variables globales
 app.use(async (req, res, next) => {
     res.locals.user = req.session.user || null;
     
@@ -35,6 +38,7 @@ app.use(async (req, res, next) => {
             );
             res.locals.cartCount = countResult[0].total || 0;
         } catch (error) {
+            console.log('Error al cargar carrito:', error.message);
             res.locals.cartCount = 0;
         }
     } else {
@@ -44,45 +48,52 @@ app.use(async (req, res, next) => {
     next();
 });
 
-// Importar rutas (manejaremos errores si no existen)
-try {
-    app.use('/', require('./routes/auth'));
-} catch (error) {
-    console.log('⚠️  Rutas de auth no disponibles aún');
-}
+// Importar rutas con manejo de errores mejorado
+const loadRoutes = () => {
+    try {
+        app.use('/', require('./routes/auth'));
+        console.log('✅ Rutas de auth cargadas');
+    } catch (error) {
+        console.log('⚠️  Rutas de auth no disponibles:', error.message);
+    }
 
-try {
-    app.use('/products', require('./routes/products'));
-} catch (error) {
-    console.log('⚠️  Rutas de products no disponibles aún');
-}
+    try {
+        app.use('/products', require('./routes/products'));
+        console.log('✅ Rutas de products cargadas');
+    } catch (error) {
+        console.log('⚠️  Rutas de products no disponibles:', error.message);
+    }
 
-try {
-    app.use('/cart', require('./routes/cart'));
-} catch (error) {
-    console.log('⚠️  Rutas de cart no disponibles aún');
-}
+    try {
+        app.use('/cart', require('./routes/cart'));
+        console.log('✅ Rutas de cart cargadas');
+    } catch (error) {
+        console.log('⚠️  Rutas de cart no disponibles:', error.message);
+    }
 
-try {
-    app.use('/orders', require('./routes/orders'));
-} catch (error) {
-    console.log('⚠️  Rutas de orders no disponibles aún');
-}
+    try {
+        app.use('/orders', require('./routes/orders'));
+        console.log('✅ Rutas de orders cargadas');
+    } catch (error) {
+        console.log('⚠️  Rutas de orders no disponibles:', error.message);
+    }
 
-try {
-    app.use('/admin', require('./routes/admin'));
-} catch (error) {
-    console.log('⚠️  Rutas de admin no disponibles aún');
-}
+    try {
+        app.use('/admin', require('./routes/admin'));
+        console.log('✅ Rutas de admin cargadas');
+    } catch (error) {
+        console.log('⚠️  Rutas de admin no disponibles:', error.message);
+    }
+};
 
-// Ruta principal - CORREGIDA
+loadRoutes();
+
+// Ruta principal mejorada
 app.get('/', async (req, res) => {
     try {
-        // Si la base de datos está disponible, cargar productos
         const db = require('./config/database');
         const [products] = await db.promise().query('SELECT * FROM productos WHERE activo = true LIMIT 8');
         
-        // Asegurarnos de que los precios sean números
         const featuredProducts = products.map(product => ({
             ...product,
             precio: Number(product.precio) || 0
@@ -93,9 +104,8 @@ app.get('/', async (req, res) => {
             user: req.session.user 
         });
     } catch (error) {
-        console.error('Error al cargar productos, usando datos de prueba:', error);
+        console.log('Usando datos de prueba:', error.message);
         
-        // Datos de prueba CORREGIDOS con precios como números
         const featuredProducts = [
             {
                 id: 1,
@@ -112,22 +122,6 @@ app.get('/', async (req, res) => {
                 precio: 2499.00,
                 imagen: 'https://i.makeagif.com/media/2-18-2024/pdXIms.gif',
                 marca: 'Logitech'
-            },
-            {
-                id: 3,
-                nombre: 'Audífonos SteelSeries Arctis Nova Pro',
-                descripcion: 'Headset gaming con sonido surround, cancelación activa de ruido',
-                precio: 5499.00,
-                imagen: 'https://es.gizmodo.com/app/uploads/2022/05/767895e36bc63addff1093cdb8fc6ce1.gif',
-                marca: 'SteelSeries'
-            },
-            {
-                id: 4,
-                nombre: 'Monitor ASUS TUF Gaming VG249Q',
-                descripcion: 'Monitor gaming 23.8" Full HD 144Hz 1ms, FreeSync y tecnología Eye Care',
-                precio: 5299.00,
-                imagen: 'https://dlcdnwebimgs.asus.com/gain/0f372e3e-f38e-4a9b-824a-978bc7689a99/w800',
-                marca: 'ASUS'
             }
         ];
         
@@ -138,13 +132,50 @@ app.get('/', async (req, res) => {
     }
 });
 
-// Ruta de prueba para verificar que el servidor funciona
-app.get('/health', (req, res) => {
-    res.json({ status: 'OK', message: 'Servidor funcionando' });
+// Ruta de salud mejorada
+app.get('/health', async (req, res) => {
+    const healthCheck = {
+        status: 'OK',
+        message: 'Servidor funcionando correctamente',
+        timestamp: new Date().toISOString(),
+        environment: process.env.NODE_ENV || 'development',
+        port: PORT
+    };
+
+    // Verificar conexión a BD si existe
+    try {
+        const db = require('./config/database');
+        await db.promise().query('SELECT 1');
+        healthCheck.database = 'Connected';
+    } catch (error) {
+        healthCheck.database = 'Disconnected';
+        healthCheck.dbError = error.message;
+    }
+
+    res.json(healthCheck);
 });
 
-app.listen(PORT, () => {
-    console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
+// Manejo de errores global
+app.use((err, req, res, next) => {
+    console.error('Error global:', err);
+    res.status(500).render('pages/error', {
+        message: 'Algo salió mal',
+        error: process.env.NODE_ENV === 'production' ? {} : err
+    });
+});
+
+// Ruta 404
+app.use((req, res) => {
+    res.status(404).render('pages/404', {
+        title: 'Página No Encontrada',
+        user: req.session.user
+    });
+});
+
+// Iniciar servidor
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Servidor corriendo en puerto: ${PORT}`);
+    console.log(`🌍 Ambiente: ${process.env.NODE_ENV || 'development'}`);
     console.log(`🎮 Carrito de compras gamer listo!`);
-    console.log(`🔍 Verifica en: http://localhost:${PORT}/health`);
+    console.log(`🔍 Health check: http://localhost:${PORT}/health`);
 });
