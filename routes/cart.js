@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/database');
 
-// Middleware para verificar autenticación
 const requireAuth = (req, res, next) => {
     if (req.session.user) {
         next();
@@ -11,7 +10,6 @@ const requireAuth = (req, res, next) => {
     }
 };
 
-// Ver carrito
 router.get('/', requireAuth, async (req, res) => {
     try {
         const query = `
@@ -49,13 +47,13 @@ router.get('/', requireAuth, async (req, res) => {
     }
 });
 
-// Agregar al carrito
+
 router.post('/add', requireAuth, async (req, res) => {
     try {
         const { productId, quantity } = req.body;
         const userId = req.session.user.id;
 
-        // Verificar si el producto existe y tiene stock
+       
         const [product] = await db.promise().query(
             'SELECT * FROM productos WHERE id = ? AND activo = true AND stock > 0',
             [productId]
